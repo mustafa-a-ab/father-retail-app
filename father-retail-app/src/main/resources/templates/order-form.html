@@ -1,0 +1,91 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org">
+  <head>
+    <title>Order Form</title>
+    <style>
+      body {
+        font-family: "Roboto", sans-serif;
+        margin: 20px;
+      }
+      .card {
+        max-width: 500px;
+        margin: 0 auto;
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        text-align: left;
+      }
+      form {
+        max-width: 500px;
+      }
+      input,
+      select,
+      textarea {
+        width: 100%;
+        padding: 8px;
+        margin: 5px 0;
+      }
+      button {
+        padding: 10px 20px;
+        background: green;
+        color: white;
+      }
+      h1 {
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Place Your Order</h1>
+
+      <form th:action="@{/orders/submit}" th:object="${order}" method="POST">
+        <label>Name:</label>
+        <input
+          type="text"
+          th:field="*{customerName}"
+          required
+          placeholder="Mustafa Abdu"
+        />
+
+        <label>Phone:</label>
+        <input
+          type="text"
+          th:field="*{customerPhone}"
+          required
+          placeholder="0501234567"
+        />
+
+        <label>Items:</label>
+        <select th:field="*{itemsOrdered}" required>
+          <option value="">Select Item</option>
+          <option value="Rice">Rice</option>
+          <option value="Flour">Flour</option>
+          <option value="Meat">Meat</option>
+          <option value="Tuna">Tuna</option>
+          <option value="Chicken">Chicken</option>
+          <option value="Oil">Oil</option>
+          <option value="Sugar">Sugar</option>
+        </select>
+
+        <label>Quantity:</label>
+        <input
+          type="text"
+          th:field="*{quantity}"
+          placeholder="e.g., 5 kg"
+          required
+        />
+
+        <label>Delivery Address:</label>
+        <textarea
+          th:field="*{deliveryAddress}"
+          placeholder="street name, building number, apartment number..."
+          required
+        ></textarea>
+
+        <button type="submit">Submit Order</button>
+      </form>
+    </div>
+  </body>
+</html>
