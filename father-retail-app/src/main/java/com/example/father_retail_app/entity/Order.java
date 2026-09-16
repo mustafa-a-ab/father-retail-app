@@ -1,6 +1,5 @@
 package com.example.father_retail_app.entity;
 
-import java.time.LocalDateTime;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -24,8 +23,7 @@ public class Order {
     public Order() {
     }
 
-    public Order(String customerName, String customerPhone, String itemsOrdered, String quantity,
-            String deliveryAddress) {
+    public Order(String customerName, String customerPhone, String itemsOrdered, String quantity,String deliveryAddress) {
         this.customerName = customerName;
         this.customerPhone = customerPhone;
         this.itemsOrdered = itemsOrdered;
