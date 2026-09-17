@@ -1,91 +1,351 @@
 <!doctype html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
   <head>
-    <title>Order Form</title>
-    <style>
-      body {
-        font-family: "Roboto", sans-serif;
-        margin: 20px;
-      }
-      .card {
-        max-width: 500px;
-        margin: 0 auto;
-        background: white;
-        padding: 30px;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        text-align: left;
-      }
-      form {
-        max-width: 500px;
-      }
-      input,
-      select,
-      textarea {
-        width: 100%;
-        padding: 8px;
-        margin: 5px 0;
-      }
-      button {
-        padding: 10px 20px;
-        background: green;
-        color: white;
-      }
-      h1 {
-        text-align: center;
-      }
-    </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Father Retail Store - Place Order</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" th:href="@{/css/style.css}" />
   </head>
   <body>
-    <div class="card">
-      <h1>Place Your Order</h1>
+    <div class="container">
+      <!-- Store Header -->
+      <div class="store-header">
+        <div class="store-badge">🛒 Father Retail Store</div>
+        <h1 class="store-title">Fast Grocery Delivery</h1>
+        <p class="store-subtitle">
+          Order fresh essentials directly through our AI assistant or standard form
+        </p>
+      </div>
 
-      <form th:action="@{/orders/submit}" th:object="${order}" method="POST">
-        <label>Name:</label>
-        <input
-          type="text"
-          th:field="*{customerName}"
-          required
-          placeholder="Mustafa Abdu"
-        />
+      <!-- Navigation Tabs (Switch between Grok Chat & Standard Form) -->
+      <div class="mode-tabs">
+        <button id="chatTabBtn" class="tab-btn active" onclick="switchTab('chat')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          Chat with Grok
+          <span class="badge">AI</span>
+        </button>
+        <button id="formTabBtn" class="tab-btn" onclick="switchTab('form')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          Standard Form
+        </button>
+      </div>
 
-        <label>Phone:</label>
-        <input
-          type="text"
-          th:field="*{customerPhone}"
-          required
-          placeholder="0501234567"
-        />
+      <!-- Main Card -->
+      <div class="card">
+        <!-- ============================================== -->
+        <!-- 1. AI CHAT ASSISTANT (TALK TO GROK HERE)      -->
+        <!-- ============================================== -->
+        <div id="chatView" class="chat-view">
+          <div class="chat-header">
+            <div class="assistant-info">
+              <div class="assistant-avatar">⚡</div>
+              <div class="assistant-details">
+                <h4>Grok Order Assistant</h4>
+                <div class="assistant-status">
+                  <span class="status-dot"></span> Online & Ready to order
+                </div>
+              </div>
+            </div>
+            <button onclick="resetChat()" class="chip-btn" title="Reset conversation">
+              🔄 New Chat
+            </button>
+          </div>
 
-        <label>Items:</label>
-        <select th:field="*{itemsOrdered}" required>
-          <option value="">Select Item</option>
-          <option value="Rice">Rice</option>
-          <option value="Flour">Flour</option>
-          <option value="Meat">Meat</option>
-          <option value="Tuna">Tuna</option>
-          <option value="Chicken">Chicken</option>
-          <option value="Oil">Oil</option>
-          <option value="Sugar">Sugar</option>
-        </select>
+          <!-- Suggested Quick Prompt Chips -->
+          <div class="suggestion-container" id="suggestionChips">
+            <button class="chip-btn" onclick="sendQuickPrompt('I want to order 5kg of Rice')">🌾 5kg Rice</button>
+            <button class="chip-btn" onclick="sendQuickPrompt('I need 2 fresh Chickens')">🍗 2 Chickens</button>
+            <button class="chip-btn" onclick="sendQuickPrompt('Order 3 bottles of Cooking Oil')">🌻 3 Bottles Oil</button>
+            <button class="chip-btn" onclick="sendQuickPrompt('10kg Flour and 2kg Sugar')">🍞 Flour & Sugar</button>
+          </div>
 
-        <label>Quantity:</label>
-        <input
-          type="text"
-          th:field="*{quantity}"
-          placeholder="e.g., 5 kg"
-          required
-        />
+          <!-- Messages Stream (Grok replies and order receipts appear here) -->
+          <div class="chat-messages" id="chatMessages">
+            <div class="message-row assistant">
+              <div class="msg-avatar">⚡</div>
+              <div class="bubble">
+                Hello! 👋 Welcome to Father Retail Store. What items can I get delivered for you today? Tell me what you need, and I'll place the order for you!
+              </div>
+            </div>
+          </div>
 
-        <label>Delivery Address:</label>
-        <textarea
-          th:field="*{deliveryAddress}"
-          placeholder="street name, building number, apartment number..."
-          required
-        ></textarea>
+          <!-- Input Bar: Type Your Order Here -->
+          <div class="chat-footer">
+            <form id="chatForm" class="chat-form" onsubmit="handleSend(event)">
+              <input
+                type="text"
+                id="userInput"
+                class="chat-input"
+                placeholder="Type your message to Grok (e.g., 5kg Rice delivered to 123 Main St...)"
+                autocomplete="off"
+                required
+              />
+              <button type="submit" id="sendBtn" class="send-btn" title="Send message">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </form>
+          </div>
+        </div>
 
-        <button type="submit">Submit Order</button>
-      </form>
+        <!-- ============================================== -->
+        <!-- 2. TRADITIONAL FORM VIEW                       -->
+        <!-- ============================================== -->
+        <div id="formView" class="form-view">
+          <form th:action="@{/orders/submit}" th:object="${order}" method="POST">
+            <div class="form-group">
+              <label>Full Name</label>
+              <input type="text" class="form-control" th:field="*{customerName}" required placeholder="Mustafa Abdu" />
+            </div>
+
+            <div class="form-group">
+              <label>Phone Number</label>
+              <input type="text" class="form-control" th:field="*{customerPhone}" required placeholder="0501234567" />
+            </div>
+
+            <div class="form-group">
+              <label>Select Item</label>
+              <select class="form-control" th:field="*{itemsOrdered}" required>
+                <option value="">-- Choose Item --</option>
+                <option value="Rice">Rice</option>
+                <option value="Flour">Flour</option>
+                <option value="Meat">Meat</option>
+                <option value="Tuna">Tuna</option>
+                <option value="Chicken">Chicken</option>
+                <option value="Oil">Oil</option>
+                <option value="Sugar">Sugar</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Quantity</label>
+              <input type="text" class="form-control" th:field="*{quantity}" placeholder="e.g., 5 kg" required />
+            </div>
+
+            <div class="form-group">
+              <label>Delivery Address</label>
+              <textarea class="form-control" th:field="*{deliveryAddress}" rows="3" placeholder="Street name, building number, apartment..." required></textarea>
+            </div>
+
+            <button type="submit" class="submit-order-btn">Submit Order</button>
+          </form>
+        </div>
+      </div>
     </div>
+
+    <script>
+      // Tab switching
+      function switchTab(mode) {
+        const chatTab = document.getElementById('chatTabBtn');
+        const formTab = document.getElementById('formTabBtn');
+        const chatView = document.getElementById('chatView');
+        const formView = document.getElementById('formView');
+
+        if (mode === 'chat') {
+          chatTab.classList.add('active');
+          formTab.classList.remove('active');
+          chatView.style.display = 'flex';
+          formView.style.display = 'none';
+        } else {
+          formTab.classList.add('active');
+          chatTab.classList.remove('active');
+          formView.style.display = 'block';
+          chatView.style.display = 'none';
+        }
+      }
+
+      // Chat state
+      let conversationHistory = [];
+
+      function scrollToBottom() {
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      function sendQuickPrompt(text) {
+        document.getElementById('userInput').value = text;
+        handleSend(new Event('submit'));
+      }
+
+      function resetChat() {
+        conversationHistory = [];
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.innerHTML = `
+          <div class="message-row assistant">
+            <div class="msg-avatar">⚡</div>
+            <div class="bubble">
+              Hello! 👋 Welcome to Father Retail Store. What items can I get delivered for you today? Tell me what you need, and I'll place the order for you!
+            </div>
+          </div>
+        `;
+        document.getElementById('suggestionChips').style.display = 'flex';
+      }
+
+      async function handleSend(e) {
+        if (e && e.preventDefault) e.preventDefault();
+
+        const input = document.getElementById('userInput');
+        const text = input.value.trim();
+        if (!text) return;
+
+        input.value = '';
+        input.disabled = true;
+        document.getElementById('sendBtn').disabled = true;
+
+        // Hide suggestions once user engages
+        document.getElementById('suggestionChips').style.display = 'none';
+
+        // 1. Render user message
+        appendUserMessage(text);
+        conversationHistory.push({ role: 'user', content: text });
+
+        // 2. Show typing indicator
+        const typingId = showTypingIndicator();
+        scrollToBottom();
+
+        try {
+          // 3. Post to Spring Boot backend
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: conversationHistory })
+          });
+
+          removeTypingIndicator(typingId);
+
+          if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          // 4. Render assistant response
+          appendAssistantMessage(data.content, data.placedOrder);
+          conversationHistory.push({ role: 'assistant', content: data.content });
+
+        } catch (error) {
+          removeTypingIndicator(typingId);
+          appendAssistantMessage("⚠️ Sorry, I could not complete your request: " + error.message);
+        } finally {
+          input.disabled = false;
+          document.getElementById('sendBtn').disabled = false;
+          input.focus();
+          scrollToBottom();
+        }
+      }
+
+      function appendUserMessage(text) {
+        const chatMessages = document.getElementById('chatMessages');
+        const row = document.createElement('div');
+        row.className = 'message-row user';
+        row.innerHTML = `
+          <div class="msg-avatar">👤</div>
+          <div class="bubble">${escapeHtml(text)}</div>
+        `;
+        chatMessages.appendChild(row);
+        scrollToBottom();
+      }
+
+      function appendAssistantMessage(text, placedOrder) {
+        const chatMessages = document.getElementById('chatMessages');
+        const row = document.createElement('div');
+        row.className = 'message-row assistant';
+
+        let receiptHtml = '';
+        if (placedOrder) {
+          receiptHtml = `
+            <div class="order-receipt-card">
+              <div class="receipt-header">
+                <div class="receipt-title">
+                  🎉 Order Placed Successfully!
+                </div>
+                <span class="receipt-badge">#${placedOrder.id}</span>
+              </div>
+              <div class="receipt-grid">
+                <div class="receipt-item">
+                  <label>Customer</label>
+                  <span>${escapeHtml(placedOrder.customerName || 'N/A')}</span>
+                </div>
+                <div class="receipt-item">
+                  <label>Phone</label>
+                  <span>${escapeHtml(placedOrder.customerPhone || 'N/A')}</span>
+                </div>
+                <div class="receipt-item">
+                  <label>Item</label>
+                  <span>${escapeHtml(placedOrder.itemsOrdered || 'N/A')}</span>
+                </div>
+                <div class="receipt-item">
+                  <label>Quantity</label>
+                  <span>${escapeHtml(placedOrder.quantity || 'N/A')}</span>
+                </div>
+                <div class="receipt-item receipt-full">
+                  <label>Delivery Address</label>
+                  <span>${escapeHtml(placedOrder.deliveryAddress || 'N/A')}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        row.innerHTML = `
+          <div class="msg-avatar">⚡</div>
+          <div class="bubble">
+            ${escapeHtml(text)}
+            ${receiptHtml}
+          </div>
+        `;
+        chatMessages.appendChild(row);
+        scrollToBottom();
+      }
+
+      function showTypingIndicator() {
+        const chatMessages = document.getElementById('chatMessages');
+        const id = 'typing-' + Date.now();
+        const row = document.createElement('div');
+        row.id = id;
+        row.className = 'message-row assistant';
+        row.innerHTML = `
+          <div class="msg-avatar">⚡</div>
+          <div class="typing-indicator">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+          </div>
+        `;
+        chatMessages.appendChild(row);
+        return id;
+      }
+
+      function removeTypingIndicator(id) {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+      }
+
+      function escapeHtml(str) {
+        if (!str) return '';
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+    </script>
   </body>
 </html>
