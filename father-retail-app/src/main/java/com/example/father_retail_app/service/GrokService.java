@@ -2,10 +2,8 @@ package com.example.father_retail_app.service;
 
 import com.example.father_retail_app.dto.chat.ChatMessage;
 import com.example.father_retail_app.dto.chat.ChatResponse;
-import com.example.father_retail_app.dto.chat.ToolCall;
 import com.example.father_retail_app.entity.Order;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
+import com.example.father_retail_app.mcp.registry.McpToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +11,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.*;
 
@@ -21,7 +21,7 @@ public class GrokService {
 
     private static final Logger logger = LoggerFactory.getLogger(GrokService.class);
 
-    private final OrderService orderService;
+    private final McpToolRegistry toolRegistry;
     private final ObjectMapper objectMapper;
     private final RestClient restClient;
 
@@ -36,28 +36,32 @@ public class GrokService {
 
     private static final String SYSTEM_PROMPT = """
             You are a friendly, efficient retail store assistant for "Father Retail Store".
-            Your goal is to help the customer place grocery orders through conversation.
+            Your goal is to help customers place grocery orders and answer questions about store inventory and order status.
             
             Popular items available in the store:
-            - Rice, Flour, Meat, Tuna, Chicken, Oil, Sugar (customers may also request other typical groceries).
+            - Rice, Flour, Meat, Tuna, Chicken, Oil, Sugar, Milk, Eggs (customers may also request other typical groceries).
             
-            To place an order, you MUST collect all 5 details:
-            1. Item(s) ordered (itemsOrdered)
-            2. Quantity (quantity)
-            3. Customer's full name (customerName)
-            4. Customer's contact phone number (customerPhone)
-            5. Delivery address (deliveryAddress)
+            Available capabilities / tools:
+            - place_order: Place a grocery order once all 5 customer details are collected.
+            - get_order: Look up order details and status using an order ID.
+            - list_recent_orders: View recent store orders.
+            - get_store_inventory: Check available groceries and package sizes.
             
-            Guidelines:
+            Order Placement Guidelines:
+            - To place an order, you MUST collect all 5 details:
+              1. Item(s) ordered (itemsOrdered)
+              2. Quantity (quantity)
+              3. Customer's full name (customerName)
+              4. Contact phone number (customerPhone)
+              5. Delivery address (deliveryAddress)
             - Keep your responses polite, warm, and concise.
             - If any of the 5 required details are missing, politely ask the user for them.
-            - When the user gives you information, acknowledge it and prompt for what is still needed.
             - Once all 5 details are known, call the 'place_order' tool immediately. Do not ask for redundant confirmations if the user already provided the info.
-            - After the 'place_order' tool executes successfully, warmly confirm to the customer that their order has been placed with its details and order number.
+            - After the tool executes successfully, warmly confirm to the customer that their order has been placed with its details and order number.
             """;
 
-    public GrokService(OrderService orderService, ObjectMapper objectMapper) {
-        this.orderService = orderService;
+    public GrokService(McpToolRegistry toolRegistry, ObjectMapper objectMapper) {
+        this.toolRegistry = toolRegistry;
         this.objectMapper = objectMapper;
         this.restClient = RestClient.builder().build();
     }
@@ -88,11 +92,11 @@ public class GrokService {
                 requestMessages.add(m);
             }
 
-            // 1st LLM call
+            // 1st LLM call with dynamically registered MCP tools
             Map<String, Object> requestPayload = new HashMap<>();
             requestPayload.put("model", model);
             requestPayload.put("messages", requestMessages);
-            requestPayload.put("tools", getToolsDefinition());
+            requestPayload.put("tools", toolRegistry.toOpenAiToolsDefinition());
             requestPayload.put("tool_choice", "auto");
 
             JsonNode responseJson = callGrokApi(requestPayload);
@@ -108,59 +112,55 @@ public class GrokService {
 
             // Check if tool call requested
             if (toolCallsNode.isArray() && !toolCallsNode.isEmpty()) {
+                Order savedOrderForReceipt = null;
+
+                // Record assistant's tool_calls message
+                Map<String, Object> assistantMessage = new HashMap<>();
+                assistantMessage.put("role", "assistant");
+                assistantMessage.put("content", content);
+                assistantMessage.put("tool_calls", objectMapper.convertValue(toolCallsNode, List.class));
+                requestMessages.add(assistantMessage);
+
                 for (JsonNode toolCall : toolCallsNode) {
+                    String toolCallId = toolCall.path("id").asText();
                     String funcName = toolCall.path("function").path("name").asText();
-                    if ("place_order".equalsIgnoreCase(funcName)) {
-                        String argsString = toolCall.path("function").path("arguments").asText();
-                        logger.info("Executing place_order tool with arguments: {}", argsString);
+                    String argsString = toolCall.path("function").path("arguments").asText("{}");
+                    logger.info("Executing MCP tool {} with arguments: {}", funcName, argsString);
 
-                        JsonNode args = objectMapper.readTree(argsString);
-                        String customerName = args.path("customerName").asText("");
-                        String customerPhone = args.path("customerPhone").asText("");
-                        String itemsOrdered = args.path("itemsOrdered").asText("");
-                        String quantity = args.path("quantity").asText("");
-                        String deliveryAddress = args.path("deliveryAddress").asText("");
+                    JsonNode args = objectMapper.readTree(argsString);
+                    Map<String, Object> executionResult = toolRegistry.executeTool(funcName, args);
 
-                        Order order = new Order(customerName, customerPhone, itemsOrdered, quantity, deliveryAddress);
-                        Order savedOrder = orderService.saveOrder(order);
-
-                        // Feed tool execution result back to Grok for a natural confirmation
-                        Map<String, Object> assistantMessage = new HashMap<>();
-                        assistantMessage.put("role", "assistant");
-                        assistantMessage.put("content", content);
-                        assistantMessage.put("tool_calls", objectMapper.convertValue(toolCallsNode, List.class));
-                        requestMessages.add(assistantMessage);
-
-                        Map<String, Object> toolResultMessage = new HashMap<>();
-                        toolResultMessage.put("role", "tool");
-                        toolResultMessage.put("tool_call_id", toolCall.path("id").asText());
-                        toolResultMessage.put("content", objectMapper.writeValueAsString(Map.of(
-                                "status", "SUCCESS",
-                                "orderId", savedOrder.getId(),
-                                "itemsOrdered", savedOrder.getItemsOrdered(),
-                                "quantity", savedOrder.getQuantity(),
-                                "deliveryAddress", savedOrder.getDeliveryAddress(),
-                                "customerName", savedOrder.getCustomerName(),
-                                "orderDate", savedOrder.getOrderDate() != null ? savedOrder.getOrderDate() : ""
-                        )));
-                        requestMessages.add(toolResultMessage);
-
-                        // Call Grok again to generate the final friendly confirmation message
-                        Map<String, Object> followUpPayload = new HashMap<>();
-                        followUpPayload.put("model", model);
-                        followUpPayload.put("messages", requestMessages);
-
-                        JsonNode followUpResponse = callGrokApi(followUpPayload);
-                        String finalMessage = followUpResponse.path("choices").get(0).path("message").path("content").asText();
-
-                        if (finalMessage.isBlank()) {
-                            finalMessage = String.format("Thank you %s! Your order #%d for %s (%s) has been placed successfully and will be delivered to %s.",
-                                    savedOrder.getCustomerName(), savedOrder.getId(), savedOrder.getItemsOrdered(), savedOrder.getQuantity(), savedOrder.getDeliveryAddress());
-                        }
-
-                        return new ChatResponse(finalMessage, savedOrder);
+                    if (executionResult.get("_entity") instanceof Order o) {
+                        savedOrderForReceipt = o;
                     }
+
+                    Map<String, Object> cleanResult = new HashMap<>(executionResult);
+                    cleanResult.remove("_entity");
+
+                    // Feed tool execution result back to Grok
+                    Map<String, Object> toolResultMessage = new HashMap<>();
+                    toolResultMessage.put("role", "tool");
+                    toolResultMessage.put("tool_call_id", toolCallId);
+                    toolResultMessage.put("content", objectMapper.writeValueAsString(cleanResult));
+                    requestMessages.add(toolResultMessage);
                 }
+
+                // Call Grok again to generate the final friendly confirmation message
+                Map<String, Object> followUpPayload = new HashMap<>();
+                followUpPayload.put("model", model);
+                followUpPayload.put("messages", requestMessages);
+
+                JsonNode followUpResponse = callGrokApi(followUpPayload);
+                String finalMessage = followUpResponse.path("choices").get(0).path("message").path("content").asText();
+
+                if (finalMessage.isBlank() && savedOrderForReceipt != null) {
+                    finalMessage = String.format("Thank you %s! Your order #%d for %s (%s) has been placed successfully and will be delivered to %s.",
+                            savedOrderForReceipt.getCustomerName(), savedOrderForReceipt.getId(),
+                            savedOrderForReceipt.getItemsOrdered(), savedOrderForReceipt.getQuantity(),
+                            savedOrderForReceipt.getDeliveryAddress());
+                }
+
+                return new ChatResponse(finalMessage, savedOrderForReceipt);
             }
 
             return new ChatResponse(content);
@@ -185,48 +185,5 @@ public class GrokService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse Grok API response: " + e.getMessage(), e);
         }
-    }
-
-    private List<Map<String, Object>> getToolsDefinition() {
-        Map<String, Object> customerNameProp = Map.of(
-                "type", "string",
-                "description", "Customer's full name");
-        Map<String, Object> customerPhoneProp = Map.of(
-                "type", "string",
-                "description", "Customer's phone number, e.g. 0501234567");
-        Map<String, Object> itemsOrderedProp = Map.of(
-                "type", "string",
-                "description", "Items ordered, e.g. Rice, Flour, Meat, Tuna, Chicken, Oil, Sugar");
-        Map<String, Object> quantityProp = Map.of(
-                "type", "string",
-                "description", "Quantity of the items, e.g. 5 kg, 2 packs");
-        Map<String, Object> deliveryAddressProp = Map.of(
-                "type", "string",
-                "description", "Full delivery address including street and building/apartment number");
-
-        Map<String, Object> properties = Map.of(
-                "customerName", customerNameProp,
-                "customerPhone", customerPhoneProp,
-                "itemsOrdered", itemsOrderedProp,
-                "quantity", quantityProp,
-                "deliveryAddress", deliveryAddressProp
-        );
-
-        Map<String, Object> parameters = Map.of(
-                "type", "object",
-                "properties", properties,
-                "required", List.of("customerName", "customerPhone", "itemsOrdered", "quantity", "deliveryAddress")
-        );
-
-        Map<String, Object> function = Map.of(
-                "name", "place_order",
-                "description", "Save and place the retail grocery order when all details are collected from the customer.",
-                "parameters", parameters
-        );
-
-        return List.of(Map.of(
-                "type", "function",
-                "function", function
-        ));
     }
 }
