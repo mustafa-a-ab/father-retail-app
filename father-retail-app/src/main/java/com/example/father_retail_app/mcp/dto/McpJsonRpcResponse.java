@@ -2,15 +2,28 @@ package com.example.father_retail_app.mcp.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+// Represents the response sent back to the AI client.
+//
+// Following the JSON-RPC 2.0 standard:
+// - If successful: includes 'result' and 'id', without 'error'
+// - If an error happened: includes 'error' and 'id', without 'result'
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class McpJsonRpcResponse {
+    // Protocol version, always "2.0"
     private String jsonrpc = "2.0";
+
+    // Matches the request ID sent by the AI
     private Object id;
+
+    // Successful result data (e.g. list of tools, tool execution outcome)
     private Object result;
+
+    // Error details if the request failed
     private McpError error;
 
     public McpJsonRpcResponse() {}
 
+    // Helper to create a successful response
     public static McpJsonRpcResponse success(Object id, Object result) {
         McpJsonRpcResponse res = new McpJsonRpcResponse();
         res.setId(id);
@@ -18,6 +31,7 @@ public class McpJsonRpcResponse {
         return res;
     }
 
+    // Helper to create an error response with an error code and message
     public static McpJsonRpcResponse error(Object id, int code, String message) {
         McpJsonRpcResponse res = new McpJsonRpcResponse();
         res.setId(id);

@@ -1,0 +1,26 @@
+spring.application.name=father-retail-app
+spring.jpa.hibernate.ddl-auto=update
+spring.sql.init.mode=always
+
+# Database
+spring.datasource.url=jdbc:sqlite:orders.db
+spring.datasource.driver-class-name=org.sqlite.JDBC
+spring.jpa.database-platform=org.hibernate.community.dialect.SQLiteDialect
+
+# Email Notifications (SMTP)
+spring.mail.host=smtp.gmail.com
+spring.mail.port=587
+spring.mail.username=${SPRING_MAIL_USERNAME:your-email@gmail.com}
+spring.mail.password=${SPRING_MAIL_PASSWORD:your-app-password}
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+
+# Grok (xAI) Configuration
+grok.api.key=${GROK_API_KEY:your-xai-api-key}
+grok.api.url=https://api.x.ai/v1/chat/completions
+grok.model=grok-4.20-0309-non-reasoning
+
+# Model Context Protocol (MCP) Configuration
+mcp.server.enabled=true
+mcp.server.name=father-retail-store
+mcp.server.version=1.0.0

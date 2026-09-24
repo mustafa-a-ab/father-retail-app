@@ -12,23 +12,42 @@ import tools.jackson.databind.JsonNode;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+// Central Registry for AI tools in the retail store.
+//
+// What this class does:
+// 1. Keeps a list of all tools the AI can use (placing orders, checking inventory, etc.).
+// 2. Shares these same tools with both:
+//    - External AI assistants (Claude Desktop, Cursor) through the MCP server.
+//    - The store's internal chat assistant (Grok).
+// 3. Runs the Java code when an AI decides to call a tool.
 @Component
 public class McpToolRegistry {
 
     private static final Logger logger = LoggerFactory.getLogger(McpToolRegistry.class);
 
+    // Map that holds all registered tools in memory by their name (e.g. "place_order")
     private final Map<String, McpToolDefinition> tools = new ConcurrentHashMap<>();
+
+    // Service used to save orders to the database and trigger notifications
     private final OrderService orderService;
+
+    // Database repository used to look up orders directly
     private final OrderRepository orderRepository;
 
+    // When Spring starts up, this constructor automatically registers all default tools
     public McpToolRegistry(OrderService orderService, OrderRepository orderRepository) {
         this.orderService = orderService;
         this.orderRepository = orderRepository;
         registerDefaultTools();
     }
 
+    // Registers the 4 built-in tools: place_order, get_order, list_recent_orders, get_store_inventory
     private void registerDefaultTools() {
-        // 1. place_order
+        // =========================================================================
+        // TOOL 1: place_order
+        // Purpose: Saves a completed grocery order into the store database.
+        // Used when: The AI (or customer) has collected all 5 mandatory delivery fields.
+        // =========================================================================
         Map<String, Object> placeOrderProps = Map.of(
                 "customerName", Map.of("type", "string", "description", "Customer's full name"),
                 "customerPhone", Map.of("type", "string", "description", "Customer's contact phone number, e.g. 0501234567"),
@@ -47,15 +66,18 @@ public class McpToolRegistry {
                 "Save and place the retail grocery order when all details are collected from the customer.",
                 placeOrderSchema,
                 args -> {
+                    // 1. Extract arguments from the AI's JSON payload
                     String customerName = args.path("customerName").asText("");
                     String customerPhone = args.path("customerPhone").asText("");
                     String itemsOrdered = args.path("itemsOrdered").asText("");
                     String quantity = args.path("quantity").asText("");
                     String deliveryAddress = args.path("deliveryAddress").asText("");
 
+                    // 2. Persist order via Spring business service
                     Order order = new Order(customerName, customerPhone, itemsOrdered, quantity, deliveryAddress);
                     Order savedOrder = orderService.saveOrder(order);
 
+                    // 3. Build response payload returned to the AI
                     Map<String, Object> result = new HashMap<>();
                     result.put("status", "SUCCESS");
                     result.put("orderId", savedOrder.getId());
@@ -65,12 +87,18 @@ public class McpToolRegistry {
                     result.put("customerName", savedOrder.getCustomerName());
                     result.put("customerPhone", savedOrder.getCustomerPhone());
                     result.put("orderDate", savedOrder.getOrderDate() != null ? savedOrder.getOrderDate() : "");
+
+                    // Internal reference for the in-app chat UI to generate a rich visual receipt card
                     result.put("_entity", savedOrder);
                     return result;
                 }
         ));
 
-        // 2. get_order
+        // =========================================================================
+        // TOOL 2: get_order
+        // Purpose: Retrieves specific order details and delivery status by numeric ID.
+        // Used when: A customer asks "What is the status of my order #123?".
+        // =========================================================================
         Map<String, Object> getOrderProps = Map.of(
                 "orderId", Map.of("type", "integer", "description", "The unique numeric ID of the order")
         );
@@ -105,7 +133,11 @@ public class McpToolRegistry {
                 }
         ));
 
-        // 3. list_recent_orders
+        // =========================================================================
+        // TOOL 3: list_recent_orders
+        // Purpose: Lists recently placed store orders with an optional count limit.
+        // Used when: Store managers or AI audit recent sales activity.
+        // =========================================================================
         Map<String, Object> listOrdersProps = Map.of(
                 "limit", Map.of("type", "integer", "description", "Maximum number of recent orders to retrieve (default 10)")
         );
@@ -122,7 +154,8 @@ public class McpToolRegistry {
                     int limit = args.path("limit").asInt(10);
                     if (limit <= 0) limit = 10;
                     List<Order> all = orderRepository.findAll();
-                    // Take the last 'limit' items reversed
+
+                    // Take the last 'limit' items in reverse chronological order (newest first)
                     List<Map<String, Object>> summary = new ArrayList<>();
                     int start = Math.max(0, all.size() - limit);
                     for (int i = all.size() - 1; i >= start; i--) {
@@ -140,7 +173,11 @@ public class McpToolRegistry {
                 }
         ));
 
-        // 4. get_store_inventory
+        // =========================================================================
+        // TOOL 4: get_store_inventory
+        // Purpose: Returns the available grocery items, categories, and standard pack units.
+        // Used when: Customers or external AI need to verify what is currently in stock.
+        // =========================================================================
         Map<String, Object> inventoryProps = Map.of(
                 "category", Map.of("type", "string", "description", "Optional product category filter, e.g. staples, meat, dairy, pantry")
         );
@@ -172,21 +209,23 @@ public class McpToolRegistry {
         logger.info("Registered {} default MCP tools.", tools.size());
     }
 
+    // Add a new tool to the registry
     public void registerTool(McpToolDefinition tool) {
         tools.put(tool.getName(), tool);
     }
 
+    // Find a tool by its name
     public Optional<McpToolDefinition> getTool(String name) {
         return Optional.ofNullable(tools.get(name));
     }
 
+    // Get all registered tools
     public Collection<McpToolDefinition> getAllTools() {
         return tools.values();
     }
 
-    /**
-     * Converts registered tools to MCP Specification format for tools/list.
-     */
+    // Formats the tools into standard Model Context Protocol (MCP) format.
+    // This is returned to Claude Desktop, Cursor, etc. when they ask for "tools/list".
     public List<Map<String, Object>> toMcpToolsList() {
         List<Map<String, Object>> list = new ArrayList<>();
         for (McpToolDefinition tool : tools.values()) {
@@ -199,9 +238,8 @@ public class McpToolRegistry {
         return list;
     }
 
-    /**
-     * Converts registered tools to OpenAI/Grok function calling format.
-     */
+    // Formats the same tools into OpenAI function-calling format.
+    // This is sent to the xAI Grok API so the chat assistant knows what tools are available.
     public List<Map<String, Object>> toOpenAiToolsDefinition() {
         List<Map<String, Object>> list = new ArrayList<>();
         for (McpToolDefinition tool : tools.values()) {
@@ -218,9 +256,8 @@ public class McpToolRegistry {
         return list;
     }
 
-    /**
-     * Executes the requested tool dynamically.
-     */
+    // Runs a tool by name using the arguments provided by the AI.
+    // If the tool fails or does not exist, it safely returns an error message instead of crashing.
     public Map<String, Object> executeTool(String toolName, JsonNode args) {
         McpToolDefinition tool = tools.get(toolName);
         if (tool == null) {

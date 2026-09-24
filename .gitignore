@@ -1,0 +1,31 @@
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Node / Frontend
+**/node_modules/
+**/dist/
+frontend/dist/
+
+# Java / Maven / Spring Boot
+**/target/
+**/.mvn/wrapper/maven-wrapper.jar
+
+# Databases & Local state
+*.db
+*.db-journal
+*.sqlite
+orders.db
+sample.db
+
+# Environment & Secrets
+.env
+.env.local
+*.env
